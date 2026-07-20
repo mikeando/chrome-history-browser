@@ -1,22 +1,42 @@
 // Architectural Data Trees interfaces
 interface HistoryNode {
   name: string;
+  url: string;
   count: number;
   firstVisit: number;
   lastVisit: number;
   children: Map<string, HistoryNode>;
 }
 
+type SortKey = 'name' | 'count' | 'firstVisit' | 'lastVisit';
+
 // Global System States
 let ignoredDomains: Set<string> = new Set();
+let currentHistoryMap: Map<string, HistoryNode> | null = null;
+let currentSort: { key: SortKey; direction: 'asc' | 'desc' } = { key: 'count', direction: 'desc' };
 
-const createNode = (name: string): HistoryNode => ({
+const createNode = (name: string, url: string): HistoryNode => ({
   name,
+  url,
   count: 0,
   firstVisit: Infinity,
   lastVisit: 0,
   children: new Map()
 });
+
+const compareNodes = (a: HistoryNode, b: HistoryNode): number => {
+  const { key, direction } = currentSort;
+  const result = key === 'name' ? a.name.localeCompare(b.name) : a[key] - b[key];
+  return direction === 'asc' ? result : -result;
+};
+
+const escapeHtml = (str: string): string =>
+  str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 const updateNodeStats = (node: HistoryNode, visitTimes: number[]) => {
   node.count += visitTimes.length;
@@ -52,21 +72,25 @@ async function getAggregatedHistory(startTime: number, endTime: number, ignored:
 
       if (validVisitTimes.length === 0) return;
 
+      const origin = `${url.protocol}//${url.host}`;
+
       // Tier 1: Domain Mapping Nodes
-      if (!rootNodes.has(domain)) rootNodes.set(domain, createNode(domain));
+      if (!rootNodes.has(domain)) rootNodes.set(domain, createNode(domain, `${origin}/`));
       const domainNode = rootNodes.get(domain)!;
       updateNodeStats(domainNode, validVisitTimes);
 
       // Tier 2: Path Sub-Trees
       const path = url.pathname === '/' ? '/' : url.pathname;
-      if (!domainNode.children.has(path)) domainNode.children.set(path, createNode(path));
+      const pathUrl = `${origin}${path}`;
+      if (!domainNode.children.has(path)) domainNode.children.set(path, createNode(path, pathUrl));
       const pathNode = domainNode.children.get(path)!;
       updateNodeStats(pathNode, validVisitTimes);
 
       // Tier 3: Query Parameter Leaf Arrays
       if (url.search) {
         const query = url.search;
-        if (!pathNode.children.has(query)) pathNode.children.set(query, createNode(query));
+        const queryUrl = `${pathUrl}${query}`;
+        if (!pathNode.children.has(query)) pathNode.children.set(query, createNode(query, queryUrl));
         const queryNode = pathNode.children.get(query)!;
         updateNodeStats(queryNode, validVisitTimes);
       }
@@ -95,21 +119,29 @@ function createRowElement(node: HistoryNode, depth: number = 0): HTMLElement {
     }).format(new Date(ts));
   };
 
+  const safeName = escapeHtml(node.name);
+  const safeUrl = escapeHtml(node.url);
+
   row.innerHTML = `
-    <div class="col-name" title="${node.name}">${node.name}</div>
+    <div class="col-name">
+      <span class="col-name-text" title="${safeName}">${safeName}</span>
+      <a class="node-link" href="${safeUrl}" target="_blank" rel="noopener noreferrer" title="Open ${safeUrl}" aria-label="Open ${safeUrl} in a new tab">↗</a>
+    </div>
     <div class="col-stats">${node.count}</div>
     <div class="col-stats">${formatDate(node.firstVisit)}</div>
     <div class="col-stats">${formatDate(node.lastVisit)}</div>
   `;
-  
+
+  // Prevent the link click from also toggling the parent <details> disclosure.
+  row.querySelector('.node-link')!.addEventListener('click', (e) => e.stopPropagation());
+
   container.appendChild(row);
 
   if (hasChildren) {
     const childrenContainer = document.createElement('div');
     childrenContainer.className = 'tree-children';
-    
-    const sortedChildren = Array.from(node.children.values())
-      .sort((a, b) => b.count - a.count);
+
+    const sortedChildren = Array.from(node.children.values()).sort(compareNodes);
 
     for (const childNode of sortedChildren) {
       childrenContainer.appendChild(createRowElement(childNode, depth + 1));
@@ -121,26 +153,61 @@ function createRowElement(node: HistoryNode, depth: number = 0): HTMLElement {
 }
 
 // Master DOM Assembler Orchestration
-async function renderHistoryTree() {
+async function refreshHistoryTree() {
   const rootElement = document.getElementById('tree-root');
   if (!rootElement) return;
 
   rootElement.innerHTML = '<em>Processing system parameters and fetching local histories...</em>';
 
   const { startTime, endTime } = getTimeBounds();
-  const historyMap = await getAggregatedHistory(startTime, endTime, ignoredDomains);
+  currentHistoryMap = await getAggregatedHistory(startTime, endTime, ignoredDomains);
+
+  renderHistoryTree();
+}
+
+function renderHistoryTree() {
+  const rootElement = document.getElementById('tree-root');
+  if (!rootElement || !currentHistoryMap) return;
 
   rootElement.innerHTML = '';
 
-  if (historyMap.size === 0) {
+  if (currentHistoryMap.size === 0) {
     rootElement.innerHTML = '<em>No history components tracked within the parsed boundary boundaries.</em>';
     return;
   }
 
-  const sortedDomains = Array.from(historyMap.values()).sort((a, b) => b.count - a.count);
+  const sortedDomains = Array.from(currentHistoryMap.values()).sort(compareNodes);
   for (const domainNode of sortedDomains) {
     rootElement.appendChild(createRowElement(domainNode, 0));
   }
+}
+
+// Sortable Column Header Controls
+function setupSortableHeaders() {
+  const headerCells = document.querySelectorAll<HTMLElement>('.grid-header [data-sort-key]');
+
+  const updateIndicators = () => {
+    headerCells.forEach(cell => {
+      const key = cell.dataset.sortKey as SortKey;
+      cell.classList.toggle('sort-asc', key === currentSort.key && currentSort.direction === 'asc');
+      cell.classList.toggle('sort-desc', key === currentSort.key && currentSort.direction === 'desc');
+    });
+  };
+
+  headerCells.forEach(cell => {
+    cell.addEventListener('click', () => {
+      const key = cell.dataset.sortKey as SortKey;
+      if (currentSort.key === key) {
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort = { key, direction: key === 'name' ? 'asc' : 'desc' };
+      }
+      updateIndicators();
+      renderHistoryTree();
+    });
+  });
+
+  updateIndicators();
 }
 
 // Timeline Filter Constraints Engine
@@ -177,7 +244,7 @@ function setupTabs() {
     viewHistory.classList.toggle('active', showHistory);
     btnSettings.classList.toggle('active', !showHistory);
     viewSettings.classList.toggle('active', !showHistory);
-    if (showHistory) renderHistoryTree();
+    if (showHistory) refreshHistoryTree();
   };
 
   btnHistory.addEventListener('click', () => toggleViews(true));
@@ -227,13 +294,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   await loadIgnoredDomains();
   setupTabs();
+  setupSortableHeaders();
   renderSettings();
 
   presetSelect.addEventListener('change', () => {
     customGroup.classList.toggle('hidden', presetSelect.value !== 'custom');
   });
 
-  refreshBtn.addEventListener('click', renderHistoryTree);
+  refreshBtn.addEventListener('click', refreshHistoryTree);
 
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -247,5 +315,5 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   });
 
-  renderHistoryTree();
+  refreshHistoryTree();
 });
