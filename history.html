@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>History Drill-Down Explorer</title>
+  <link rel="stylesheet" href="history.css">
+</head>
+<body>
+  <div class="history-container">
+    
+    <!-- Tab Navigation -->
+    <nav class="tabs">
+      <button id="btn-tab-history" class="tab-btn active">History Explorer</button>
+      <button id="btn-tab-settings" class="tab-btn">Ignored Domains</button>
+    </nav>
+
+    <!-- Tab 1: History Explorer View -->
+    <div id="view-history" class="tab-content active">
+      <div class="time-controls">
+        <label for="time-preset">Time Range:</label>
+        <select id="time-preset">
+          <option value="1w">Last Week</option>
+          <option value="1m">Last Month</option>
+          <option value="3m">Last 3 Months</option>
+          <option value="custom">Specific Range</option>
+        </select>
+
+        <div id="custom-date-group" class="hidden">
+          <input type="date" id="date-start" aria-label="Start Date">
+          <span>to</span>
+          <input type="date" id="date-end" aria-label="End Date">
+        </div>
+        
+        <button id="btn-refresh" class="btn-primary">Apply Filters</button>
+      </div>
+
+      <!-- The Table Structure -->
+      <div class="grid-row grid-header">
+        <div>Domain / Path / Query</div>
+        <div>Visits</div>
+        <div>First Visit Window</div>
+        <div>Last Visit Window</div>
+      </div>
+      <div id="tree-root"></div>
+    </div>
+
+    <!-- Tab 2: Settings View -->
+    <div id="view-settings" class="tab-content">
+      <h2>Domain Filtering Blocklist</h2>
+      <p>Enter domains you wish to hide from your structural analysis (e.g., google.com, localhost).</p>
+      
+      <form id="add-domain-form" class="add-domain-form">
+        <input type="text" id="new-domain-input" placeholder="e.g., facebook.com" required>
+        <button type="submit" class="btn-primary">Filter Domain</button>
+      </form>
+
+      <ul id="ignored-domains-list" class="domain-list"></ul>
+    </div>
+
+  </div>
+  <script type="module" src="ui.js"></script>
+</body>
+</html>

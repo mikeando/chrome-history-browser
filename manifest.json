@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "History Drill-Down",
+  "version": "1.0.0",
+  "description": "A collapsible, domain-first tree view explorer for your browser history.",
+  "permissions": [
+    "history",
+    "storage"
+  ],
+  "action": {
+    "default_title": "Open History Explorer"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

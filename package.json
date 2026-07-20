@@ -1,0 +1,25 @@
+{
+  "name": "chrome-history-browser",
+  "version": "1.0.0",
+  "description": "",
+  "main": "background.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mikeando/chrome-history-browser.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/mikeando/chrome-history-browser/issues"
+  },
+  "homepage": "https://github.com/mikeando/chrome-history-browser#readme",
+  "devDependencies": {
+    "@types/chrome": "^0.2.2",
+    "typescript": "^7.0.2"
+  }
+}
